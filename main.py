@@ -1,6 +1,31 @@
 import time
-import keyboard # For spacebar detection
-from playsound import playsound # For playing sound
+import keyboard
+from playsound import playsound
+import os # To interact with the operating system, e.g., check if a file exists
+
+# --- Global constants for file operations ---
+BONUS_POOL_FILE = "bonus_pool.txt"
+SOUND_FILE_PATH = "E:\\Coding\\Python\\Programs\\Qimer\\tick.wav" # User-defined path
+
+def load_bonus_pool_from_file():
+    """Loads the bonus time from a file."""
+    if os.path.exists(BONUS_POOL_FILE):
+        try:
+            with open(BONUS_POOL_FILE, 'r') as f:
+                content = f.read().strip()
+                if content: # Check if file is not empty
+                    return float(content)
+        except (ValueError, IOError) as e:
+            print(f"Error loading bonus pool from file: {e}. Starting with 0 bonus time.")
+    return 0.0
+
+def save_bonus_pool_to_file(amount):
+    """Saves the current bonus time to a file."""
+    try:
+        with open(BONUS_POOL_FILE, 'w') as f:
+            f.write(str(amount))
+    except IOError as e:
+        print(f"Error saving bonus pool to file: {e}")
 
 def run_question_timer():
     """
@@ -12,6 +37,7 @@ def run_question_timer():
     it automatically adds all bonus time to it.
     Plays a sound at the end of each question when it's completed (timed out or skipped forward).
     Displays the total actual time spent on questions at the end.
+    Allows loading/saving of bonus pool for future sessions.
     """
     print("Welcome to the Question Timer!")
 
@@ -42,9 +68,32 @@ def run_question_timer():
         except ValueError:
             print("Invalid input. Please enter a number for time.")
 
+    # --- Load saved bonus pool at the start if user chooses ---
+    total_excess_time_seconds = 0.0 # Initial bonus pool for the current session
+
+    last_session_bonus = load_bonus_pool_from_file()
+    if last_session_bonus > 0:
+        print(f"\nINFO: A bonus pool of {last_session_bonus:.1f} seconds was saved from your last session.")
+        print("Press 'x' NOW to load this bonus pool, or press any other key (like Enter) to start with an empty bonus pool.")
+        
+        # This will block until a key is pressed.
+        # We suppress=False so the key press isn't consumed and can potentially be used later if needed,
+        # though for 'x' as a one-time load, it doesn't matter much.
+        pressed_key = keyboard.read_key(suppress=False) 
+        
+        if pressed_key == 'x':
+            total_excess_time_seconds = last_session_bonus
+            save_bonus_pool_to_file(0.0) # Clear the file after loading to prevent accidental re-load
+            print(f"Bonus pool loaded! Starting this session with {total_excess_time_seconds:.1f} seconds bonus time.")
+        else:
+            print("Not loading saved bonus. Starting with an empty bonus pool.")
+    else:
+        print("No saved bonus pool found from previous sessions. Starting with an empty bonus pool.")
+        
+    time.sleep(0.5) # Give a moment for message to display and key debounce
+
     # --- Configuration for sound ---
-    # Make sure this path is correct and the file exists!
-    sound_file_path = "E:\\Coding\\Python\\Programs\\Qimer\\tick.wav"
+    # SOUND_FILE_PATH is already a global constant
     # --- End sound configuration ---
 
     # --- Initialize question states ---
@@ -57,13 +106,12 @@ def run_question_timer():
             'total_time_spent_on_this_q': 0      # Accumulates actual time spent on this specific question
         })
     
-    # --- Global counters for the session ---
-    total_excess_time_seconds = 0 # Bonus time pool
-
     print(f"\n--- Starting Timer for {num_questions} Questions (Each {time_limit_minutes:.1f} minutes) ---")
     print("Press SPACEBAR to **advance to the next question** and save remaining time to bonus pool.")
     print("Press 'a' to **transfer all bonus time to the current question**.")
     print("Press 'p' to **move to the previous question** (adds bonus time if < 10s left).")
+    # Initial display of bonus pool, will be updated during the timer loop
+    print(f"Current Bonus Pool: {total_excess_time_seconds:.1f} seconds") 
 
     current_question_num = 1 # We use 1-based indexing for display
 
@@ -109,9 +157,9 @@ def run_question_timer():
                     
                     total_excess_time_seconds = 0 # Reset bonus pool
                     
-                    print(f"\nTransferred {transfer_amount:.1f} seconds! Question {current_question_num} now has {current_q_data['current_remaining']:.1f} seconds remaining.")
+                    print(f"\nTransferred {transfer_amount:.1f} seconds! Question {current_question_num} now has {current_q_data['current_remaining']:.1f} seconds remaining. Bonus Pool: {total_excess_time_seconds:.1f}s")
                 else:
-                    print("\nNo excess time to transfer.")
+                    print("\nNo excess time to transfer. Bonus Pool: 0.0s")
                 time.sleep(0.15) # Debounce sleep
 
             if keyboard.is_pressed('p'):
@@ -124,7 +172,7 @@ def run_question_timer():
                     # Add time spent in this segment to this question's total spent time
                     current_q_data['total_time_spent_on_this_q'] += elapsed_since_segment_start
 
-                    # --- NEW LOGIC for 'p': Conditionally add bonus time to the previous question ---
+                    # --- Conditionally add bonus time to the previous question ---
                     prev_q_index = current_question_num - 2 # Index of the question we're going back to
                     prev_q_data = question_states[prev_q_index]
 
@@ -133,12 +181,12 @@ def run_question_timer():
                             transfer_amount = total_excess_time_seconds
                             prev_q_data['current_remaining'] += transfer_amount # Add bonus time to previous question
                             total_excess_time_seconds = 0 # Reset bonus pool
-                            print(f"Question {current_question_num-1} had <10s left. Added {transfer_amount:.1f} seconds from bonus pool.")
+                            print(f"Question {current_question_num-1} had <10s left. Added {transfer_amount:.1f} seconds from bonus pool. Bonus Pool: {total_excess_time_seconds:.1f}s")
                             print(f"Question {current_question_num-1} now has {prev_q_data['current_remaining']:.1f} seconds remaining.")
                         else:
-                            print(f"Question {current_question_num-1} had <10s left, but bonus pool is empty. No time added.")
+                            print(f"Question {current_question_num-1} had <10s left, but bonus pool is empty. No time added. Bonus Pool: {total_excess_time_seconds:.1f}s")
                     else:
-                        print(f"Question {current_question_num-1} has {prev_q_data['current_remaining']:.1f} seconds left. Bonus time not added.")
+                        print(f"Question {current_question_num-1} has {prev_q_data['current_remaining']:.1f} seconds left. Bonus time not added. Bonus Pool: {total_excess_time_seconds:.1f}s")
                     # --- END NEW LOGIC ---
 
                     current_question_num -= 1 # Decrement question number
@@ -161,7 +209,7 @@ def run_question_timer():
                     total_excess_time_seconds += remaining_for_this_question
                     print(f"\nSpacebar pressed! Skipping to next question. Added {remaining_for_this_question:.1f} seconds to Bonus Time Pool ({total_excess_time_seconds:.1f}s total).")
                 else:
-                    print("\nSpacebar pressed! Skipping to next question (no time left to save).")
+                    print("\nSpacebar pressed! Skipping to next question (no time left to save). Bonus Pool: {total_excess_time_seconds:.1f}s")
 
                 action_taken_in_loop = 'skipped_forward'
                 current_question_num += 1 # Advance question number
@@ -189,10 +237,10 @@ def run_question_timer():
         # Play sound only if question completed (timed out or skipped forward)
         if action_taken_in_loop in ['skipped_forward', 'timed_out']:
             try:
-                playsound(sound_file_path)
+                playsound(SOUND_FILE_PATH)
             except Exception as e:
                 print(f"Could not play sound: {e}")
-                print(f"Please ensure the file '{sound_file_path}' exists and playsound is installed correctly.")
+                print(f"Please ensure the file '{SOUND_FILE_PATH}' exists and playsound is installed correctly.")
             
             if action_taken_in_loop == 'timed_out': # Add small pause for natural timeout
                  time.sleep(0.5)
@@ -219,8 +267,12 @@ def run_question_timer():
     else:
         print("--- Bonus Time Pool is empty. ---")
 
+    # --- Save bonus pool at the very end ---
+    save_bonus_pool_to_file(total_excess_time_seconds)
+    print(f"\nYour current bonus pool ({total_excess_time_seconds:.1f} seconds) has been saved for your next session.")
+    
     # --- Pause at the end for viewing details ---
-    input("\nPress Enter to exit...") # This line will make the console wait for user input
+    input("\nPress Enter to exit...")
 
 if __name__ == "__main__":
     run_question_timer()
