@@ -4,7 +4,7 @@ from playsound import playsound
 import os # To interact with the operating system, e.g., check if a file exists
 
 # --- Global constants for file operations ---
-BONUS_POOL_FILE = "bonus_pool.txt"
+BONUS_POOL_FILE = "E:\\Coding\\Python\\Programs\\Qimer\\bonus_pool.txt"
 SOUND_FILE_PATH = "E:\\Coding\\Python\\Programs\\Qimer\\tick.wav" # User-defined path
 
 def load_bonus_pool_from_file():
